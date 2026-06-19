@@ -8,8 +8,7 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 
-const char* ssid = "Arulyoka";
-const char* password = "R75bnS9Jnt9PVht93F";
+#include "secrets.h"
 
 #define TFT_CS   5
 #define TFT_DC   2
