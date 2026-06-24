@@ -7,7 +7,6 @@
 #include <ArduinoJson.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
-
 #include "secrets.h"
 
 #define TFT_CS   5
@@ -306,7 +305,7 @@ void setup() {
 }
 
 void loop() {
-  if (millis() - lastSensorUpdate > 5000) {
+  if (millis() - lastSensorUpdate > 1000) {
     readIndoorSensor();
     updateIndoorDisplay();
     lastSensorUpdate = millis();
