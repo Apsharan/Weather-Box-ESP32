@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Wire.h>
 #include <time.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
@@ -9,9 +10,14 @@
 #include <Adafruit_BME280.h>
 #include "secrets.h"
 
+// TFT pins
 #define TFT_CS   5
-#define TFT_DC   2
-#define TFT_RST  4
+#define TFT_DC   4
+#define TFT_RST  2
+
+// BME280 I2C pins
+#define BME_SDA 21
+#define BME_SCL 22
 
 Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RST);
 Adafruit_BME280 bme;
@@ -24,16 +30,16 @@ float pressure = 0;
 
 float outdoorTemp = 0;
 float windSpeed = 0;
-float rain = 0;
 int rainChance = 0;
-int weatherCode = 0;
-String sunrise = "";
-String sunset = "";
+
+bool bmeOK = false;
 
 unsigned long lastWeatherUpdate = 0;
 unsigned long lastSensorUpdate = 0;
 
 void readIndoorSensor() {
+  if (!bmeOK) return;
+
   indoorTemp = bme.readTemperature();
   indoorHum = bme.readHumidity();
   pressure = bme.readPressure() / 100.0F;
@@ -44,11 +50,12 @@ void getWeatherData() {
     "https://api.open-meteo.com/v1/forecast?"
     "latitude=48.91&longitude=2.33"
     "&current=temperature_2m,weather_code,wind_speed_10m,rain"
-    "&daily=sunrise,sunset,precipitation_probability_max"
+    "&daily=precipitation_probability_max"
     "&timezone=Europe/Paris";
 
   HTTPClient http;
   http.begin(url);
+
   int httpCode = http.GET();
 
   if (httpCode > 0) {
@@ -59,12 +66,8 @@ void getWeatherData() {
 
     if (!error) {
       outdoorTemp = doc["current"]["temperature_2m"];
-      weatherCode = doc["current"]["weather_code"];
       windSpeed = doc["current"]["wind_speed_10m"];
-      rain = doc["current"]["rain"];
       rainChance = doc["daily"]["precipitation_probability_max"][0];
-      sunrise = doc["daily"]["sunrise"][0].as<String>();
-      sunset = doc["daily"]["sunset"][0].as<String>();
 
       Serial.println("Weather updated");
     } else {
@@ -112,6 +115,7 @@ void drawWifiIcon(int x, int y, int level, uint16_t color) {
 
 void connectWiFi() {
   tft.fillScreen(ILI9341_BLACK);
+
   tft.setTextColor(ILI9341_WHITE);
   tft.setTextSize(2);
   tft.setCursor(30, 30);
@@ -190,7 +194,7 @@ void updateTimeDisplay() {
   }
 
   if (String(dateStr) != lastDate) {
-    tft.fillRect(90, 70, 150, 25, ILI9341_BLACK);
+    tft.fillRect(60, 70, 170, 25, ILI9341_BLACK);
     tft.setTextColor(ILI9341_WHITE);
     tft.setTextSize(2);
     tft.setCursor(60, 70);
@@ -205,6 +209,15 @@ void updateIndoorDisplay() {
 
   int temp10 = indoorTemp * 10;
   int hum = indoorHum;
+
+  if (!bmeOK) {
+    tft.fillRect(20, 155, 220, 50, ILI9341_BLACK);
+    tft.setTextColor(ILI9341_RED);
+    tft.setTextSize(2);
+    tft.setCursor(20, 155);
+    tft.println("BME280 error");
+    return;
+  }
 
   if (temp10 != lastTemp10) {
     tft.fillRect(20, 155, 180, 22, ILI9341_BLACK);
@@ -283,10 +296,17 @@ void setup() {
   tft.setRotation(4);
   tft.fillScreen(ILI9341_BLACK);
 
-  if (!bme.begin(0x76)) {
-    Serial.println("BME280 not found");
+  Wire.begin(BME_SDA, BME_SCL);
+
+  if (bme.begin(0x76)) {
+    bmeOK = true;
+    Serial.println("BME280 OK at 0x76");
+  } else if (bme.begin(0x77)) {
+    bmeOK = true;
+    Serial.println("BME280 OK at 0x77");
   } else {
-    Serial.println("BME280 OK");
+    bmeOK = false;
+    Serial.println("BME280 not found");
   }
 
   connectWiFi();
